@@ -5,3 +5,149 @@ date: "2024-11-12"
 output: html_document
 ---
 
+```{r setup, include = FALSE}
+library(tidyverse)
+library(purrr)
+```
+
+# Problem 2
+
+## Base scenario (mu = 0)
+
+Set the design elements.
+```{r}
+n = 30
+sigma = 5
+mu = 0
+n_samples = 5000
+```
+
+Generate 5000 datasets with random normal distributions with the characteristics described above.
+```{r}
+# Create empty list of length 5000
+data = vector("list", length = n_samples)
+
+# Generate samples and fill list
+for (i in 1:n_samples){
+  data[[i]] = rnorm(n, mu, sigma)
+}
+
+# Convert list to dataframe for ease of use
+data_df =
+  tibble(
+    id = c(1:n_samples),
+    samp = data)
+```
+
+For each dataset, save the observed mean and p-value arising from the test below.
+
+$$H_0: \mu = 0 \quad \quad Given: \alpha = 0.05$$
+
+```{r}
+# Add columns with t_test results, observed mean, and p-value
+data_df = data_df |> 
+  mutate(
+    t_test = map(samp, \(x) broom::tidy(t.test(x))),
+    mu_obs = map_dbl(t_test, \(x) x$estimate),
+    p_value = map_dbl(t_test, \(x) x$p.value)
+  )
+
+# Preview of dataframe
+head(data_df, 10)
+```
+
+## Replicating the process for other scenarios (mu = {1:6})
+
+Repeat the process above for the following scenarios:
+
+$$\mu = \{ 1, 2, 3, 4, 5, 6 \}$$
+To do this I will create two functions which will do the following:
+
+* **Function 1:** Create a dataframe with 5000 samples given the mu value and other parameters (get_norm_samples)
+* **Function 2:** Perform the t-test on each sample in the dataframe and save the estimate and p-value from each (perform_t_test)
+
+```{r}
+get_norm_samples = function(mu = 0, n = 30, sigma = 5, n_samples = 10){
+  # Conditional
+  if (!is.numeric(c(n, sigma, mu, n_samples))){
+    stop("all arguments must be numeric")
+  }
+  
+  # Create empty list of length n_samples
+  data = vector("list", length = n_samples)
+  
+  # Generate samples and fill list
+  for (i in 1:n_samples){
+    data[[i]] = rnorm(n, mu, sigma)
+  }
+  
+  # Convert list to dataframe for ease of use
+  data_df =
+    tibble(
+      id = c(1:n_samples),
+      samp = data)
+  
+  # Return output data_df with all samples
+  return(data_df)
+}
+```
+
+```{r}
+perform_t_test = function(data_df){
+  output_df = data_df |> 
+    mutate(
+      t_test = map(samp, \(x) broom::tidy(t.test(x))),
+      mu_obs = map_dbl(t_test, \(x) x$estimate),
+      p_value = map_dbl(t_test, \(x) x$p.value)
+    ) |> 
+    select(id, mu_obs, p_value)
+  
+  return(output_df)
+}
+```
+
+Now that the functions are ready, let's run the process for all mu = {0:6}.
+```{r}
+# List of all mu values
+mu_list = c(0:6)
+
+# Dataframe containing all mu values and results for each
+results_df = 
+  tibble(
+    mu = mu_list,
+    result = map(mu_list, \(x) perform_t_test(get_norm_samples(mu = x)))
+  )
+
+# Let's look at the results for mu = 0
+results_df$result[[mu == 0]]
+```
+
+## Visualizing Hypothesis Testing
+
+Plot the proportion of times the null was rejected.
+```{r}
+alpha = 0.05
+
+results_df |> 
+  unnest(result) |> 
+  mutate(
+    reject_h = p_value < alpha) |> 
+  group_by(mu) |> 
+  summarize(
+    pr_reject = mean(reject_h)) |> 
+  ggplot(aes(x = mu, y = pr_reject)) +
+  geom_line(color = "cornflowerblue", alpha = 0.5) +
+  geom_point() +
+  labs(
+    title = "Null Rejection by Mu Value",
+    x = "Mu",
+    y = "Proportion of Times Null\nHypothesis was Rejected"
+  )
+```
+
+
+
+
+
+
+
