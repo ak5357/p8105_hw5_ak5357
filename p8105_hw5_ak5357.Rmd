@@ -24,12 +24,14 @@ theme_set(
 
 ```
 
-# Problem 2
+# **Problem 2**
 
-## Base scenario (mu = 0)
+## _Random Normal Samples and T-Tests_
+
+### Base scenario (mu = 0)
 
 Set the design elements.
-```{r}
+```{r design_elements}
 n = 30
 sigma = 5
 mu = 0
@@ -37,7 +39,7 @@ n_samples = 5000
 ```
 
 Generate 5000 datasets with random normal distributions with the characteristics described above.
-```{r}
+```{r mu_0_samples}
 # Create empty list of length 5000
 data = vector("list", length = n_samples)
 
@@ -57,7 +59,7 @@ For each dataset, save the observed mean and p-value arising from the test below
 
 $$H_0: \mu = 0 \quad \quad Given: \alpha = 0.05$$
 
-```{r}
+```{r mu_0_t_test}
 # Add columns with t_test results, observed mean, and p-value
 data_df = data_df |> 
   mutate(
@@ -69,7 +71,7 @@ data_df = data_df |>
 head(data_df, 10)
 ```
 
-## Replicating the process for other scenarios (mu = {1:6})
+### Replicating the process for other scenarios (mu = {1:6})
 
 Repeat the process above for the following scenarios:
 
@@ -79,8 +81,8 @@ To do this I will create two functions which will do the following:
 * **Function 1:** Create a dataframe with 5000 samples given the mu value and other parameters (get_norm_samples)
 * **Function 2:** Perform the t-test on each sample in the dataframe and save the estimate and p-value from each (perform_t_test)
 
-```{r}
-get_norm_samples = function(mu = 0, n = 30, sigma = 5, n_samples = 10){
+```{r f_get_norm_samples}
+get_norm_samples = function(mu = 0, n = 30, sigma = 5, n_samples = 5000){
   # Conditional
   if (!is.numeric(c(n, sigma, mu, n_samples))){
     stop("all arguments must be numeric")
@@ -105,7 +107,7 @@ get_norm_samples = function(mu = 0, n = 30, sigma = 5, n_samples = 10){
 }
 ```
 
-```{r}
+```{r f_perform_t_test}
 perform_t_test = function(data_df){
   output_df = data_df |> 
     mutate(
@@ -120,7 +122,7 @@ perform_t_test = function(data_df){
 ```
 
 Now that the functions are ready, let's run the process for all mu = {0:6}.
-```{r}
+```{r all_mu_processing}
 # List of all mu values
 mu_list = c(0:6)
 
@@ -135,10 +137,10 @@ results_df =
 results_df$result[[mu == 0]]
 ```
 
-## Visualizing Hypothesis Testing
+### Visualizing Hypothesis Testing
 
 Plot the proportion of times the null was rejected for each mu value.
-```{r}
+```{r plot_proportion_reject_null}
 alpha = 0.05
 
 results_df |> 
@@ -159,10 +161,9 @@ results_df |>
 ```
 
 Plot the average estimate of mu compared to the true value of mu, for all samples and for only samples where the null was rejected.
-
-```{r}
-
+```{r plot_obs_mu}
 results_df |> 
+  # Manipulate Data ------------------------
   unnest(result) |> 
   filter(p_value < 0.05) |> 
   group_by(mu) |> 
@@ -181,11 +182,37 @@ results_df |>
     sample_type = case_when(
       sample_type == "avg_mu_obs_RH" ~ "Samples where Null was Rejected",
       sample_type == "avg_mu_obs_ALL" ~ "All Samples")) |>
+  # Create Plot ----------------------------
   ggplot(aes(x = mu, y = mu_obs, color = sample_type)) +
   geom_point(alpha = .5, size = 3) +
-  geom_line()
+  geom_line() +
+  labs(
+    title = "Observed Mu vs. True Mu",
+    x = "True Mu",
+    y = "Observed Mu",
+    color = "Sample Type:"
+  )
+```
+
+# **Problem 3**
+
+## _Homicide Statistics_
+
+Import Washington Post homicide data.
+```{r}
+homicide_df = read_csv("data/homicide-data.csv")
+
+homicide_df
+
 
 ```
+
+
+
+
+
+
+
 
 
 
