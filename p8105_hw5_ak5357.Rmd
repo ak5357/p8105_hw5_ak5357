@@ -28,7 +28,7 @@ theme_set(
 
 ## _Random Normal Samples and T-Tests_
 
-### Base scenario (mu = 0)
+#### **Base scenario (mu = 0)**
 
 Set the design elements.
 ```{r design_elements}
@@ -71,7 +71,7 @@ data_df = data_df |>
 head(data_df, 10)
 ```
 
-### Replicating the process for other scenarios (mu = {1:6})
+#### **Replicating the process for other scenarios (mu = {1:6})**
 
 Repeat the process above for the following scenarios:
 
@@ -137,7 +137,7 @@ results_df =
 results_df$result[[mu == 0]]
 ```
 
-### Visualizing Hypothesis Testing
+#### **Visualizing Hypothesis Testing**
 
 Plot the proportion of times the null was rejected for each mu value.
 ```{r plot_proportion_reject_null}
@@ -160,19 +160,18 @@ results_df |>
   )
 ```
 
+#### **Visualizing Mu**
+
 Plot the average estimate of mu compared to the true value of mu, for all samples and for only samples where the null was rejected.
 ```{r plot_obs_mu}
 results_df |> 
   # Manipulate Data ------------------------
   unnest(result) |> 
-  filter(p_value < 0.05) |> 
+  #filter(p_value < 0.05) |> 
   group_by(mu) |> 
-  summarize(avg_mu_obs_RH = mean(mu_obs)) |> 
-  left_join(
-    results_df |> 
-      unnest(result) |>
-      group_by(mu) |> 
-      summarize(avg_mu_obs_ALL = mean(mu_obs))
+  summarize(
+    avg_mu_obs_RH = mean(mu_obs[p_value < 0.05]),
+    avg_mu_obs_ALL = mean(mu_obs)
   ) |>
   pivot_longer(
     cols = -mu,
@@ -198,20 +197,149 @@ results_df |>
 
 ## _Homicide Statistics_
 
+#### **Data Import**
+
 Import Washington Post homicide data.
-```{r}
-homicide_df = read_csv("data/homicide-data.csv")
-
-homicide_df
-
-
+```{r import_homicide_data, message = FALSE}
+homicide_df = read_csv("data/homicide-data.csv") |> 
+  mutate(city_state = paste0(city, ", ", state))
 ```
 
+#### **Describing the Dataset**
 
+Describe the raw data.
+```{r describe_homicide_data}
+n_cities = homicide_df |> 
+  select(city_state) |> 
+  n_distinct()
 
+n_states = homicide_df |> 
+  select(state) |> 
+  n_distinct()
+```
 
+This dataset contains information about homicide cases in `r n_cities` cities, across `r n_states` states. The following table summarizes some key facts about the ten cities with the highest number of homicide cases. I would describe the data more, but the Washington Post article has a pay-wall so I can't read it.
 
+```{r summarize_homicide_data}
+homicide_df |> 
+  group_by(city_state) |> 
+  summarize(
+    n_hom = n(),
+    "Number of Solved Homicides" = sum(disposition == "Closed by arrest", na.rm = TRUE),
+    "Number of Unsolved Homicides" = sum(disposition != "Closed by arrest", na.rm = TRUE),
+    "% Female Victims" = paste0(round(sum(victim_sex == "Female") / n() * 100, 1), "%"),
+    "% Male Victims" = paste0(round(sum(victim_sex == "Male") / n() * 100, 1), "%"),
+    "% Unknown Gender Victims" = paste0(round(sum(victim_sex == "Unknown") / n() * 100, 1), "%"),
+  ) |> 
+  arrange(-n_hom) |>
+  rename("Total Number of Homicides" = n_hom) |> 
+  head(10) |> 
+  knitr::kable()
+```
 
+#### **Homicide Count Summary Table**
+
+Here are the numbers of total homicides and unsolved homicides in each city.
+```{r summarize_unsolved_homicides}
+homicide_df |> 
+  group_by(city_state) |> 
+  summarize(
+    n_homicides = n(),
+    n_unsolved = sum(disposition != "Closed by arrest", na.rm = TRUE),
+    pct_unsolved = paste0(round(n_unsolved / n_homicides * 100, 1), "%")
+  ) |> 
+  rename(
+    "City, State" = city_state,
+    "Number of Homicides" = n_homicides,
+    "Number of Unsolved Homicides" = n_unsolved,
+    "% Unsolved Homicides" = pct_unsolved
+  ) |> 
+  knitr::kable()
+```
+
+#### **Proportion test for unsolved homicides in Baltimore, MD.**
+```{r pr_unsolved_baltimore}
+# Create sub-dataframe with only data from Baltimore, MD
+baltimore_df = homicide_df |> 
+  filter(city_state == "Baltimore, MD")
+
+# Perform proportion test and save results
+baltimore_prop_test_result = 
+  prop.test(
+    x = sum(baltimore_df$disposition != "Closed by arrest", na.rm = TRUE),
+    n = nrow(baltimore_df)) |> 
+  broom::tidy()
+
+# Pull estimate and confidence interval
+baltimore_estimate = as.numeric(baltimore_prop_test_result$estimate) |> round(3)
+baltimore_ci_ll = as.numeric(baltimore_prop_test_result$conf.low) |> round(3)
+baltimore_ci_ul = as.numeric(baltimore_prop_test_result$conf.high) |> round(3)
+```
+
+**Result:** Based on the results of this proportion test, we can see that the estimated proportion is `r baltimore_estimate` with a 95% CI [`r baltimore_ci_ll`, `r baltimore_ci_ul`].
+
+#### **Replicate Process for all Cities**
+
+To do this, first I will write a function to extract the proportion estimate and confidence interval when given the input arguments for the prop.test function.
+```{r perform_prop_test_function}
+get_prop = function(x, n){
+  # Perform proportion test and define key resulting values
+  result = prop.test(x, n) |>
+    broom::tidy() |> 
+    suppressWarnings()
+  
+  # Generate and return output
+  output = tibble(
+    estimate = as.numeric(result$estimate) |> round(3),
+    ci_ul = as.numeric(result$conf.low) |> round(3),
+    ci_ll = as.numeric(result$conf.high) |> round(3)
+  )
+  return(output)
+}
+```
+
+Then, I will use the map2 function from the purrr library to apply my new get_prop function to all cities' data.
+```{r all_cities_prop_test}
+# Run prop.test values for all cities
+city_props_df = homicide_df |> 
+  group_by(city_state) |> 
+  summarize(
+    n_unsolved = sum(disposition != "Closed by arrest", na.rm = TRUE),
+    n_homicides = n()
+  ) |> 
+  ungroup() |> 
+  mutate(prop_test = map2(n_unsolved, n_homicides, get_prop)) |> 
+  unnest(prop_test)
+
+# Preview result
+city_props_df |> 
+  head(5) |> 
+  knitr::kable()
+```
+
+#### **Visualizing all Cities' Proportion Test Results**
+
+The following plot visualizes the proportion estimates and confidence intervals for unsolved homicides in all cities in the datasets.
+
+_**Note:** The confidence interval for unsolved homicide proportion in Tulsa, AL is extremely large. This is because Tulsa, AL has only one homicide and zero unsolved homicides recorded in this dataset. Very small sample sizes yield highly uncertain results in the proportion test function, hence the large errorbar._
+
+```{r plot_all_cities_prop_test}
+# Reclassify city_state column as factor type, leveled by -(prop estimate)
+city_props_df = city_props_df |> 
+  mutate(city_state = fct_reorder(city_state, estimate, .na_rm = TRUE)) 
+
+# Generate plot
+city_props_df |> 
+  ggplot(aes(x = city_state, y = estimate)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = ci_ll, ymax = ci_ul)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(
+    title = paste0("Unsolved Homicides in ", nrow(city_props_df), " U.S. Cities"),
+    x = "City, State",
+    y = "Proportion of Homicides\nthat are Unsolved"
+  )
+```
 
 
 
