@@ -207,7 +207,6 @@ homicide_df = read_csv("data/homicide-data.csv") |>
 
 #### **Describing the Dataset**
 
-Describe the raw data.
 ```{r describe_homicide_data}
 n_cities = homicide_df |> 
   select(city_state) |> 
@@ -218,7 +217,9 @@ n_states = homicide_df |>
   n_distinct()
 ```
 
-This dataset contains information about homicide cases in `r n_cities` cities, across `r n_states` states. The following table summarizes some key facts about the ten cities with the highest number of homicide cases. I would describe the data more, but the Washington Post article has a pay-wall so I can't read it.
+**Description:** This dataset contains information about homicide cases in `r n_cities` cities, across `r n_states` states. The following table summarizes some key facts about the ten cities with the highest number of homicide cases.
+
+This dataset was sourced from the Washington Post, which collected data on more than 52,000 criminal homicides over the past decade in the largest American cities. Washington Post reporters received data in many formats and worked for months to clean and standardize it. The resulting dataset includes information on such as location of killing, arrest status, and basic demographics.
 
 ```{r summarize_homicide_data}
 homicide_df |> 
